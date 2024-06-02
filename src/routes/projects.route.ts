@@ -1,8 +1,68 @@
 import express, { Request, Response, NextFunction } from 'express';
 import sharp from 'sharp';
 import {fromBuffer} from 'file-type';
+import { TErrorResponse, TPlan, TProject } from '@/types/types';
 
 const router = express.Router();
+
+function isErrorProject(data: TErrorResponse|{project: TProject}): data is TErrorResponse {
+    return !!(data as TErrorResponse).error;
+}
+function isErrorPlans(data: TErrorResponse|{plans: TPlan[]}): data is TErrorResponse {
+    return !!(data as TErrorResponse).error;
+}
+
+const checkPlan = async (projectId:string) => {
+    try {
+        const resFetch = await fetch(`${process.env.URL_PROJECT_SERVICE}/api/projects/${projectId}`, {
+            method: 'GET',
+            headers: {
+                'Content-Type': 'application/json'
+            }
+        });
+        const data: TErrorResponse|{project:TProject} = await resFetch.json();
+        if (isErrorProject(data)) {
+            throw new Error('Invalid project');
+        }
+
+        const {trialFinishedAt, planFinishedAt} = data.project;
+
+        const trialFinishedAtTimestamp = new Date(trialFinishedAt).getTime();
+        const planFinishedAtTimestamp = new Date(planFinishedAt).getTime();
+
+        const now = Date.now();
+        if (now > trialFinishedAtTimestamp) {
+            if (now > planFinishedAtTimestamp) {
+                throw new Error('plan expired');
+            }
+        }
+
+        const resFetchPlans = await fetch(`${process.env.URL_PROJECT_SERVICE}/api/plans?code=${data.project.plan}`, {
+            method: 'GET',
+            headers: {
+                'Content-Type': 'application/json'
+            }
+        });
+        const dataPlans: TErrorResponse|{plans:TPlan[]} = await resFetchPlans.json();
+        if (isErrorPlans(dataPlans)) {
+            throw new Error('Invalid plans');
+        }
+
+        const {features} = dataPlans.plans[0];
+        const featureFile = features.find(f => f.code === 'files');
+        if (!featureFile) {
+            throw new Error('error feature plan');
+        }
+
+        if (!featureFile.rules.webp) {
+            return false;
+        }
+
+        return true;
+    } catch(e) {
+        return false;
+    }
+};
 
 const renderImage = async (projectId:string, uuidFilename:string, width:number, height:number, ext:string) => {
     try {
@@ -17,6 +77,7 @@ const renderImage = async (projectId:string, uuidFilename:string, width:number, 
         }
 
         const buffer = ext !== 'webp' ? await image.toBuffer() : await image.webp().toBuffer();
+
         const mimeInfo = await fromBuffer(buffer);
         const bufferLength = buffer.length;
 
@@ -65,6 +126,13 @@ router.get('/:projectId/f/:filename', async (req: Request, res: Response, next: 
         const uuidFilename = file.uuidName + '.' + file.ext;
 
         if (file.contentType === 'image') {
+            if (ext === 'webp') {
+                const webpEnabled = await checkPlan(projectId);
+                if (!webpEnabled) {
+                    return res.status(404).send('Webp format does not enabled. Please, upgrade your plan.');
+                }
+            }
+
             const {buffer, bufferLength, mimeType} = await renderImage(projectId, uuidFilename, width, height, ext);
 
             res.writeHead(200, {
