@@ -54,13 +54,15 @@ const checkPlan = async (projectId:string) => {
             throw new Error('error feature plan');
         }
 
-        if (!featureFile.rules.webp) {
-            return false;
-        }
-
-        return true;
+        return {
+            webpEnabled: featureFile.rules.webp,
+            dynamicResizeEnabled: featureFile.rules.dynamicResize
+        };
     } catch(e) {
-        return false;
+        return {
+            webpEnabled: false,
+            dynamicResizeEnabled: false
+        };
     }
 };
 
@@ -96,6 +98,8 @@ router.get('/:projectId/f/:filename', async (req: Request, res: Response, next: 
         let height = 0;
 
         const regex = new RegExp('_([0-9]{0,4})x([0-9]{0,4})(\\..*)$');
+        const isDynamicResize = regex.test(filename);
+
         filename = filename.replace(regex, (match, p1, p2, p3) => {
             width = p1 ? +p1 : 0;
             height = p2 ? +p2 : 0;
@@ -126,9 +130,13 @@ router.get('/:projectId/f/:filename', async (req: Request, res: Response, next: 
         const uuidFilename = file.uuidName + '.' + file.ext;
 
         if (file.contentType === 'image') {
-            if (ext === 'webp') {
-                const webpEnabled = await checkPlan(projectId);
-                if (!webpEnabled) {
+            if (isDynamicResize || ext === 'webp') {
+                const {webpEnabled, dynamicResizeEnabled} = await checkPlan(projectId);
+
+                if (isDynamicResize && !dynamicResizeEnabled) {
+                    return res.status(404).send('Dynamic resize image does not enabled. Please, upgrade your plan.');
+                }
+                if (ext === 'webp' && !webpEnabled) {
                     return res.status(404).send('Webp format does not enabled. Please, upgrade your plan.');
                 }
             }
