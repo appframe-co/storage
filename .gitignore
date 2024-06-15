@@ -11,3 +11,5 @@
 *.tsbuildinfo
 
 /upload
+
+.DS_Store
