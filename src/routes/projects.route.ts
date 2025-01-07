@@ -66,9 +66,12 @@ const checkPlan = async (projectId:string) => {
     }
 };
 
-const renderImage = async (projectId:string, uuidFilename:string, width:number, height:number, ext:string) => {
+const renderImage = async (projectId:string, uuidName:string, filename:string, width:number, height:number, ext:string, key:string) => {
     try {
-        const image = sharp(`./upload/p/${projectId}/f/${uuidFilename}`);
+        const res = await fetch(`${process.env.S3_URL}/p/${projectId}/f/${uuidName}/${filename}.${ext}`);
+        const fileBuf = await res.arrayBuffer();
+
+        const image = sharp(fileBuf);
         const {width: widthImg=0, height: heightImg=0} = await image.metadata();
 
         if (width || height) {
@@ -127,8 +130,6 @@ router.get('/:projectId/f/:filename', async (req: Request, res: Response, next: 
             return next();
         }
 
-        const uuidFilename = file.uuidName + '.' + file.ext;
-
         if (file.contentType === 'image') {
             if (isDynamicResize || ext === 'webp') {
                 const {webpEnabled, dynamicResizeEnabled} = await checkPlan(projectId);
@@ -141,7 +142,7 @@ router.get('/:projectId/f/:filename', async (req: Request, res: Response, next: 
                 }
             }
 
-            const {buffer, bufferLength, mimeType} = await renderImage(projectId, uuidFilename, width, height, ext);
+            const {buffer, bufferLength, mimeType} = await renderImage(projectId, file.uuidName, filename, width, height, ext, file.S3Key);
 
             res.writeHead(200, {
                 'Content-Type': mimeType,
