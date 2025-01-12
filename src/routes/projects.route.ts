@@ -66,9 +66,9 @@ const checkPlan = async (projectId:string) => {
     }
 };
 
-const renderImage = async (projectId:string, uuidName:string, filename:string, width:number, height:number, ext:string, key:string) => {
+const renderImage = async (projectId:string, uuidName:string, filename:string, width:number, height:number, fileExt:string, ext:string) => {
     try {
-        const res = await fetch(`${process.env.S3_URL}/p/${projectId}/f/${uuidName}/${filename}.${ext}`);
+        const res = await fetch(`${process.env.S3_URL}/p/${projectId}/f/${uuidName}/${filename}.${fileExt}`);
         const fileBuf = await res.arrayBuffer();
 
         const image = sharp(fileBuf);
@@ -142,7 +142,7 @@ router.get('/:projectId/f/:filename', async (req: Request, res: Response, next: 
                 }
             }
 
-            const {buffer, bufferLength, mimeType} = await renderImage(projectId, file.uuidName, filename, width, height, ext, file.S3Key);
+            const {buffer, bufferLength, mimeType} = await renderImage(projectId, file.uuidName, filename, width, height, file.ext, ext);
 
             res.writeHead(200, {
                 'Content-Type': mimeType,
